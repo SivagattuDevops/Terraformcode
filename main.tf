@@ -25,10 +25,16 @@ module "s3" {
 module "iam" {
   source = "./modules/iam"
 }
-*/
+
 
 module "cloudwatch_cloudtrail" {
   source = "./modules/cloudwatch_cloudtrail"
+}
+
+*/
+
+module "lambda" {
+  source = "./modules/lambda"
 }
 
 

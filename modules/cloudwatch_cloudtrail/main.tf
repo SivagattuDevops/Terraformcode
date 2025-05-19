@@ -35,29 +35,44 @@ resource "aws_iam_role" "cloudtrail_role" {
 }
 
 # 🔹 Attach CloudWatch Logs policy to the IAM role
-resource "aws_iam_role_policy" "cloudtrail_logs_policy" {
-  name = "CloudTrailLogsPolicy"
-  role = aws_iam_role.cloudtrail_role.id
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_s3_bucket_policy" "cloudtrail_policy" {
+  bucket = aws_s3_bucket.cloudtrail_logs.id
 
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
+        Sid = "AWSCloudTrailWrite",
         Effect = "Allow",
-        Action = [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ],
-        Resource = "${aws_cloudwatch_log_group.cloudtrail_log_group.arn}:*"
-      },
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        },
+        Action = "s3:PutObject",
+        Resource = "arn:aws:s3:::${aws_s3_bucket.cloudtrail_logs.id}/AWSLogs/${data.aws_caller_identity.current.account_id}/*",
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      }
       {
+        Sid = "AWSCloudTrailGetAcl",
         Effect = "Allow",
-        Action = "logs:DescribeLogGroups",
-        Resource = "*"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        },
+        Action = "s3:GetBucketAcl",
+        Resource = "arn:aws:s3:::${aws_s3_bucket.cloudtrail_logs.id}"
       }
     ]
   })
 }
+
+
+
 
 # 🔹 Create the CloudTrail trail
 resource "aws_cloudtrail" "my_trail" {
@@ -69,7 +84,4 @@ resource "aws_cloudtrail" "my_trail" {
   cloud_watch_logs_group_arn    = "${aws_cloudwatch_log_group.cloudtrail_log_group.arn}:*"
   cloud_watch_logs_role_arn     = aws_iam_role.cloudtrail_role.arn
   
-  depends_on = [
-    aws_iam_role_policy.cloudtrail_logs_policy
-  ]
 }
