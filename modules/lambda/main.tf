@@ -19,33 +19,35 @@ resource "aws_iam_role" "lambda_ec2_role" {
 }
 
 # IAM Policy to allow EC2 actions
-resource "aws_iam_role_policy" "lambda_ec2_policy" {
-  name = "lambda_ec2_permissions"
-  role = aws_iam_role.lambda_ec2_role.id
+resource "aws_iam_policy" "lambda_publish_sns" {
+  name = "AllowLambdaToPublishToSNSTopic"
+
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
         Effect = "Allow",
         Action = [
+          "sns:Publish",
           "ec2:DescribeInstances",
           "ec2:StartInstances",
           "ec2:StopInstances"
         ],
-        Resource = "*"
-      },
-      {
-        Effect = "Allow",
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ],
-        Resource = "*"
+        Resource = [
+          aws_sns_topic.start_instance_alert.arn,
+          "*"
+        
+                  ]
       }
     ]
   })
 }
+
+resource "aws_iam_role_policy_attachment" "attach_lambda_publish_sns" {
+  role       = aws_iam_role.lambda_ec2_role.name
+  policy_arn = aws_iam_policy.lambda_publish_sns.arn
+}
+
 
 # Archive the Lambda function code (manually place ec2_start.py and ec2_stop.py in ./lambda folder)
 data "archive_file" "ec2_start_zip" {
@@ -85,7 +87,7 @@ resource "aws_lambda_function" "ec2_stop" {
 # CloudWatch Event rule to trigger EC2 Stop at 12 AM daily
 resource "aws_cloudwatch_event_rule" "stop_schedule" {
   name                = "ec2_stop_schedule"
-  schedule_expression = "cron(0/3 * * * ? *)"
+  schedule_expression = "cron(0/10 * * * ? *)"
 }
 
 # CloudWatch Event rule to trigger EC2 Start at 6 AM daily
@@ -141,22 +143,21 @@ resource "aws_sns_topic_subscription" "email" {
 # SNS SMS Subscription
 resource "aws_sns_topic_subscription" "sms" {
   topic_arn = aws_sns_topic.start_instance_alert.arn
-  protocol  = "sms"
-  endpoint  = "8341103848"
+  protocol  = "email"
+  endpoint  = "8341103848sivagattu97@gmail.com"
 }
 
 
-# SNS Topic as Lambda Destination (invoke manually or via some trigger)
-resource "aws_lambda_permission" "sns_invoke_lambda" {
-  statement_id  = "AllowExecutionFromSNS"
-  action        = "lambda:InvokeFunction"
+  resource "aws_lambda_function_event_invoke_config" "invoke_config" {
   function_name = aws_lambda_function.ec2_start.function_name
-  principal     = "sns.amazonaws.com"
-  source_arn    = aws_sns_topic.start_instance_alert.arn
+  maximum_retry_attempts = 0
+
+  destination_config {
+    on_success {
+      destination = aws_sns_topic.start_instance_alert.arn
+    
+    }
+  }
 }
 
-resource "aws_sns_topic_subscription" "lambda_trigger" {
-  topic_arn = aws_sns_topic.start_instance_alert.arn
-  protocol  = "lambda"
-  endpoint  = aws_lambda_function.ec2_start.function_name
-}
+
