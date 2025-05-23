@@ -31,11 +31,16 @@ module "cloudwatch_cloudtrail" {
   source = "./modules/cloudwatch_cloudtrail"
 }
 
-*/
+
 
 module "lambda" {
   source = "./modules/lambda"
 }
 
+*/
+
+module "Route53" {
+  source = "./modules/Route53"
+}
 
 
